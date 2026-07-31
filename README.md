@@ -309,14 +309,16 @@ BAG_FOLDER=26_04_09_rgb_imu_calibration
 MCAP=$(ls calibration_bags/$BAG_FOLDER/*.mcap)
 ros2 run kalibr_imu_ros2 kalibr_calibrate_imu_camera \
   --bag $MCAP \
-  --cam calibration_bags/$BAG_FOLDER/calibration_results/camchain_rgb_imx577.yaml \
+  --cams calibration_bags/$BAG_FOLDER/calibration_results/camchain_rgb_imx577.yaml \
   --imu src/kalibr_ros2/kalibr_bmi270_imu.yaml \
   --target src/kalibr_ros2/kalibr_aprilgrid.yaml \
+  --output-dir calibration_bags/$BAG_FOLDER/calibration_results \
   --dont-show-report \
   --num-threads 4 2>&1
 ```
 
-Output files are written **alongside the bag file** (named from the `.mcap` filename, no `--output-dir` flag):
+Output files are written to `--output-dir`, or alongside the bag when the
+option is omitted:
 ```
 calibration_bags/$BAG_FOLDER/<bag>-camchain-imucam.yaml   ← T_cam_imu + timeshift
 calibration_bags/$BAG_FOLDER/<bag>-imu.yaml               ← refined IMU parameters

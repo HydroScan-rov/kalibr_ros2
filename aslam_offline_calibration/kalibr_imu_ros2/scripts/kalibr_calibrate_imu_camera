@@ -101,6 +101,8 @@ def parseArgs():
 
     #Result options  
     outputSettings = parser.add_argument_group('Output options')
+    outputSettings.add_argument('--output-dir', dest='output_dir',
+                                help='Directory for generated calibration files. Defaults to the bag directory.')
     outputSettings.add_argument('--show-extraction', action='store_true', dest='showextraction', help='Show the calibration target extraction. (disables plots)')
     outputSettings.add_argument('--extraction-stepping', action='store_true', dest='extractionstepping', help='Show each image during calibration target extraction  (disables plots)', required=False)
     outputSettings.add_argument('--verbose', action='store_true', dest='verbose', help='Verbose output (disables plots)')
@@ -220,6 +222,9 @@ def main():
     print("")
 
     bagtag = os.path.splitext(parsed.bagfile[0])[0]
+    if parsed.output_dir:
+        os.makedirs(parsed.output_dir, exist_ok=True)
+        bagtag = os.path.join(parsed.output_dir, os.path.basename(bagtag))
     yamlFilename = bagtag + "-camchain-imucam.yaml"
     iCal.saveCamChainParametersYaml(yamlFilename)
     print("Results written to:")
