@@ -115,11 +115,9 @@ def parseArgs():
         parser.print_help()
         sys.exit(2)
     
-    #Parser the argument list
-    try:
-        parsed = parser.parse_args()
-    except:
-        sys.exit(2)
+    # Parse the argument list. argparse uses SystemExit(0) for --help, so do not
+    # catch it as an error.
+    parsed = parser.parse_args()
                  
     if parsed.verbose:
         parsed.showextraction = True             
