@@ -2,7 +2,7 @@
 print("importing libraries")
 import sm
 # Import from ROS2 package paths
-from kalibr_imu_ros2.kalibr_common import ConfigReader as kc
+from kalibr_common import ConfigReader as kc
 from kalibr_imu_ros2.kalibr_imu_camera_calibration.IccCalibrator import IccCalibrator
 from kalibr_imu_ros2.kalibr_imu_camera_calibration import IccSensors as sens
 from kalibr_imu_ros2.kalibr_imu_camera_calibration import IccUtil as util
