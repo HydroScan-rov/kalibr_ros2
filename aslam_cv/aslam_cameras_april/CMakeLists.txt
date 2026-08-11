@@ -147,4 +147,15 @@ add_subdirectory(test)
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
+ament_export_dependencies(
+  aslam_cameras
+  Boost
+  Eigen3
+  ethz_apriltag2
+  OpenCV
+  sm_boost
+  sm_common
+  sm_eigen
+  sm_logging
+)
 ament_package()
