@@ -1,35 +1,59 @@
 import sm
 
 import numpy as np
-import sys
 import multiprocessing
+import pickle
+import signal
 try:
    import queue
 except ImportError:
    import Queue as queue # python 2.x
-import time
 import copy
 import cv2
+import traceback
 
-def multicoreExtractionWrapper(detector, taskq, resultq, clearImages, noTransformation):    
-    while 1:
+
+def _stamp_text(stamp):
+    try:
+        return "{0:.9f}".format(stamp.toSec())
+    except (AttributeError, TypeError, ValueError):
+        return str(stamp)
+
+
+def _worker_exit_text(process):
+    if process.exitcode is None:
+        return "still running"
+    if process.exitcode < 0:
         try:
-            task = taskq.get_nowait()
-        except queue.Empty:
+            return "signal {0} ({1})".format(
+                -process.exitcode, signal.Signals(-process.exitcode).name
+            )
+        except ValueError:
+            return "signal {0}".format(-process.exitcode)
+    return "exit code {0}".format(process.exitcode)
+
+def multicoreExtractionWrapper(detector, taskq, resultq, clearImages, noTransformation):
+    while True:
+        task = taskq.get()
+        if task is None:
             return
         idx = task[0]
         stamp = task[1]
         image = task[2]
-        
-        if noTransformation:
-            success, obs = detector.findTargetNoTransformation(stamp, np.array(image))
-        else:
-            success, obs = detector.findTarget(stamp, np.array(image))
-            
-        if clearImages:
-            obs.clearImage()
-        if success:
-            resultq.put( (obs, idx) )
+
+        try:
+            if noTransformation:
+                success, obs = detector.findTargetNoTransformation(stamp, np.array(image))
+            else:
+                success, obs = detector.findTarget(stamp, np.array(image))
+
+            if clearImages:
+                obs.clearImage()
+            payload = pickle.dumps(obs, protocol=pickle.HIGHEST_PROTOCOL) if success else None
+            resultq.put(("result", idx, payload))
+        except BaseException:
+            resultq.put(("error", idx, _stamp_text(stamp), traceback.format_exc()))
+            return
 
 def extractCornersFromDataset(dataset, detector, multithreading=False, numProcesses=None, clearImages=True, noTransformation=False):
     print("Extracting calibration target corners")    
@@ -40,60 +64,97 @@ def extractCornersFromDataset(dataset, detector, multithreading=False, numProces
     iProgress = sm.Progress2(numImages)
     iProgress.sample()
             
-    if multithreading:
+    if multithreading and numProcesses != 1:
         if not numProcesses:
             numProcesses = max(1,multiprocessing.cpu_count()-1)
+        if numProcesses < 1:
+            raise ValueError("numProcesses must be at least 1")
+        manager = None
+        taskq = None
+        plist = []
         try:
-            # Use plain multiprocessing.Queue (not Manager.Queue) so items are
-            # pickled/unpickled directly in the worker without a proxy server.
-            # Manager.Queue double-proxies numpy arrays and breaks numpy_eigen
-            # converters; it also spawns extra server processes unnecessarily.
-            resultq = multiprocessing.Queue()
+            # Observations contain Boost.Python/numpy_eigen objects. Serialize
+            # them in the worker and let the manager queue transport only bytes.
+            # This avoids double conversion in the manager and prevents a worker
+            # crash from corrupting the result channel used by the parent.
+            manager = multiprocessing.Manager()
+            resultq = manager.Queue()
             taskq = multiprocessing.Queue()
 
             for idx, (timestamp, image) in enumerate(dataset.readDataset()):
                 taskq.put( (idx, timestamp, image) )
+            for _ in range(numProcesses):
+                taskq.put(None)
                 
             collected = []
-            plist=list()
             for pidx in range(0, numProcesses):
                 detector_copy = copy.copy(detector)
                 p = multiprocessing.Process(target=multicoreExtractionWrapper, args=(detector_copy, taskq, resultq, clearImages, noTransformation, ))
                 p.start()
                 plist.append(p)
 
-            # Drain the result queue continuously while waiting for workers.
-            # This is required to prevent a deadlock: workers block trying to put
-            # large observation objects into the queue once the OS pipe buffer
-            # (~64 KB) fills up, but the main process only reads AFTER all workers
-            # finish — a classic circular wait.
-            last_done=0
-            while 1:
-                # Drain whatever is already available
-                while True:
-                    try:
-                        collected.append(resultq.get_nowait())
-                    except queue.Empty:
-                        break
-                if all([not p.is_alive() for p in plist]):
-                    time.sleep(0.05)
-                    break
-                done = numImages-taskq.qsize()
-                sys.stdout.flush()
-                if (done-last_done) > 0:
-                    iProgress.sample(done-last_done)
-                last_done = done
-                time.sleep(0.5)
-            # Final drain after all workers have exited
-            while True:
+            completed = 0
+            while completed < numImages:
                 try:
-                    collected.append(resultq.get_nowait())
+                    message = resultq.get(timeout=0.5)
                 except queue.Empty:
-                    break
+                    failed = [p for p in plist if p.exitcode not in (None, 0)]
+                    if failed:
+                        details = ", ".join(
+                            "pid {0}: {1}".format(p.pid, _worker_exit_text(p))
+                            for p in failed
+                        )
+                        raise RuntimeError("Corner extraction worker failed ({0})".format(details))
+                    if all(not p.is_alive() for p in plist):
+                        raise RuntimeError(
+                            "Corner extraction workers exited after {0} of {1} images"
+                            .format(completed, numImages)
+                        )
+                    continue
+
+                kind = message[0]
+                if kind == "error":
+                    _, idx, stamp, details = message
+                    raise RuntimeError(
+                        "Corner extraction failed for image {0} at {1}s:\n{2}"
+                        .format(idx, stamp, details.rstrip())
+                    )
+                if kind != "result":
+                    raise RuntimeError("Unknown corner extraction result: {0}".format(kind))
+
+                _, idx, payload = message
+                if payload is not None:
+                    collected.append((pickle.loads(payload), idx))
+                completed += 1
+                iProgress.sample()
+
+            for p in plist:
+                p.join()
+            failed = [p for p in plist if p.exitcode != 0]
+            if failed:
+                details = ", ".join(
+                    "pid {0}: {1}".format(p.pid, _worker_exit_text(p))
+                    for p in failed
+                )
+                raise RuntimeError("Corner extraction worker failed ({0})".format(details))
         except Exception as e:
             raise RuntimeError("Exception during multithreaded extraction: {0}".format(e))
+        finally:
+            for p in plist:
+                if p.is_alive():
+                    p.terminate()
+            for p in plist:
+                p.join(timeout=5.0)
+                if p.is_alive():
+                    p.kill()
+                    p.join()
+            if taskq is not None:
+                taskq.cancel_join_thread()
+                taskq.close()
+            if manager is not None:
+                manager.shutdown()
         
-        #get result sorted by time (=idx) — already collected above to prevent deadlock
+        #get result sorted by time (=idx)
         if collected:
             sortedObs = sorted(collected, key=lambda tup: tup[1])
             targetObservations = [obs for obs, idx in sortedObs]
@@ -115,7 +176,7 @@ def extractCornersFromDataset(dataset, detector, multithreading=False, numProces
 
     if len(targetObservations) == 0:
         print("\r")
-        sm.logFatal("No corners could be extracted for camera {0}! Check the calibration target configuration and dataset.".format(dataset.topic))
+        raise RuntimeError("No corners could be extracted for camera {0}! Check the calibration target configuration and dataset.".format(dataset.topic))
     else:    
         print("\r  Extracted corners for %d images (of %d images)                              " % (len(targetObservations), numImages))
 

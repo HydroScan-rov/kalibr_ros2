@@ -1,5 +1,6 @@
 #include <vector>
 #include <algorithm>
+#include <sstream>
 #include <Eigen/Core>
 #include <opencv2/core/core.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
@@ -158,40 +159,33 @@ bool GridCalibrationTargetAprilgrid::computeObservation(
   std::sort(detections.begin(), detections.end(),
             AprilTags::TagDetection::sortByIdCompare);
 
-  // check for duplicate tagIds (--> if found: wild Apriltags in image not belonging to calibration target)
-  // (only if we have more than 1 tag...)
+  // Check for duplicate tag IDs. A duplicate makes the observation ambiguous:
+  // one of the detections belongs to another target (or is a false positive),
+  // and there is no safe way to decide which set of corners to retain.
   if (detections.size() > 1) {
-    for (unsigned i = 0; i < detections.size() - 1; i++)
+    std::vector<int> duplicateIds;
+    for (unsigned i = 0; i < detections.size() - 1; i++) {
       if (detections[i].id == detections[i + 1].id) {
-        //show the duplicate tags in the image
-        cv::destroyAllWindows();
-        cv::namedWindow("Wild Apriltag detected. Hide them!");
-        cv::startWindowThread();
-
-        cv::Mat imageCopy = image.clone();
-        cv::cvtColor(imageCopy, imageCopy, cv::COLOR_GRAY2RGB);
-
-        //mark all duplicate tags in image
-        for (int j = 0; j < detections.size() - 1; j++) {
-          if (detections[j].id == detections[j + 1].id) {
-            detections[j].draw(imageCopy);
-            detections[j + 1].draw(imageCopy);
-          }
+        if (duplicateIds.empty() || duplicateIds.back() != detections[i].id) {
+          duplicateIds.push_back(detections[i].id);
         }
-
-        cv::putText(imageCopy, "Duplicate Apriltags detected. Hide them.",
-                    cv::Point(50, 50), cv::FONT_HERSHEY_SIMPLEX, 0.8,
-                    CV_RGB(255,0,0), 2, 8, false);
-        cv::putText(imageCopy, "Press enter to exit...", cv::Point(50, 80),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.8, CV_RGB(255,0,0), 2, 8, false);
-        cv::imshow("Duplicate Apriltags detected. Hide them", imageCopy);  // OpenCV call
-
-        // and exit
-        SM_FATAL_STREAM("\n[ERROR]: Found apriltag not belonging to calibration board. Check the image for the tag and hide it.\n");
-
-        cv::waitKey();
-        exit(0);
       }
+    }
+
+    if (!duplicateIds.empty()) {
+      std::ostringstream ids;
+      for (size_t i = 0; i < duplicateIds.size(); ++i) {
+        if (i > 0) {
+          ids << ", ";
+        }
+        ids << duplicateIds[i];
+      }
+
+      SM_THROW(Exception,
+               "Duplicate AprilTag ID(s) detected: [" << ids.str()
+               << "]. Only the calibration AprilGrid may be visible; hide or remove "
+                  "all other AprilTag targets before recording.");
+    }
   }
 
   // convert corners to cv::Mat (4 consecutive corners form one tag)
