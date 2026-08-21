@@ -100,3 +100,39 @@ TEST (DetectorComparisonTest, Compare) {
   }
 
 }
+
+TEST(OriginalDetectorTest, DuplicateTagIdsFailWithoutOpeningAWindow) {
+  constexpr int kGridRows = 6;
+  constexpr int kGridCols = 6;
+  constexpr int kMarkerSize = 120;
+  constexpr int kMargin = 30;
+  constexpr int kSpacing = 24;
+  constexpr int kBorderBits = 2;
+
+  cv::Mat board = createTestAprilGrid(
+      kGridRows, kGridCols, kMarkerSize, kMargin, kSpacing, kBorderBits);
+  cv::Mat canvas(board.rows, board.cols + kMarkerSize + 2 * kMargin,
+                 CV_8UC1, cv::Scalar(255));
+  board.copyTo(canvas(cv::Rect(0, 0, board.cols, board.rows)));
+
+  cv::Ptr<cv::aruco::Dictionary> dictionary =
+      cv::aruco::getPredefinedDictionary(cv::aruco::DICT_APRILTAG_36h11);
+  cv::Mat duplicate;
+  cv::aruco::drawMarker(dictionary, 0, kMarkerSize, duplicate, kBorderBits);
+  duplicate.copyTo(canvas(cv::Rect(board.cols + kMargin, kMargin,
+                                   kMarkerSize, kMarkerSize)));
+
+  aslam::cameras::GridCalibrationTargetAprilgrid target(
+      kGridRows, kGridCols, 1.0, 0.2);
+  Eigen::MatrixXd imagePoints;
+  std::vector<bool> cornersObserved;
+
+  try {
+    target.computeObservation(canvas, imagePoints, cornersObserved);
+    FAIL() << "Expected duplicate AprilTag IDs to be rejected";
+  } catch (const aslam::cameras::GridCalibrationTargetAprilgrid::Exception& error) {
+    const std::string message = error.what();
+    EXPECT_NE(message.find("Duplicate AprilTag ID(s) detected"), std::string::npos);
+    EXPECT_NE(message.find("[0]"), std::string::npos);
+  }
+}
