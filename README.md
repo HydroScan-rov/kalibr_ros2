@@ -1,5 +1,42 @@
 # Kalibr2
 
+## Standalone headless build
+
+`standalone/CMakeLists.txt` builds the stereo and calibrated-IMU algorithms
+without ROS, ament or colcon. It requires Ubuntu 24.04, Python 3.12/NumPy,
+Boost.Python, Eigen, SuiteSparse, OpenCV core/imgproc/imgcodecs/calib3d/ArUco,
+yaml-cpp and CLI11. Only `pinhole-radtan`, `pinhole-equi` and one AprilGrid
+stereo pair are exposed by this build; the original ROS build is retained.
+
+```bash
+cmake -S standalone -B build/standalone -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/lib/hydroscan-kalibr
+cmake --build build/standalone --parallel 8
+DESTDIR="$PWD/build/staging" cmake --install build/standalone
+```
+
+The installed runtime has a private `lib/`, `python/` and `bin/` layout.
+`KALIBR_HEADLESS=1` selects the lazy dataset readers and numerical-only reports;
+the embedding launcher supplies `PYTHONPATH` for the private Python directory.
+No ROS environment is sourced. The small `_kalibr_image` extension handles
+grayscale conversion, lossless frame caching and stereo rectification without
+Python OpenCV, HighGUI or Matplotlib.
+
+`kalibr-calibrate-cameras` consumes a YAML configuration whose camera sources
+contain an `index` path. Each index row is `sensor_timestamp_ns,relative.png`.
+`kalibr-calibrate-imu --bag DATASET_DIR` reads `dataset.json`, mapping original
+topic names to those image indices and to the IMU CSV. IMU rows contain integer
+sensor nanoseconds followed by gyro x/y/z in rad/s and acceleration x/y/z in
+m/s². Images are loaded lazily; timestamps and axes are retained unchanged.
+Numerical outputs use the same transforms and optimizer as the ROS build.
+
+The owning `visual-slam-calibration` repository provides the MCAP extractor,
+CLI, package builder and integration tests. The standalone build reuses the
+original stereo executable implementation; `KALIBR_HEADLESS` selects plain
+dataset/YAML adapters and excludes graphical calls. The reported stereo RMSE
+is the root mean square of residual magnitudes rather than the magnitude of
+their sum.
+
 A modern multi-camera calibration toolbox built on ROS 2.
 
 ## Introduction

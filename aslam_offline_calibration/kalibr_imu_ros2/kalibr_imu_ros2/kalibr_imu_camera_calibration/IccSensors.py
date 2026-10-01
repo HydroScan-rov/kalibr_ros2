@@ -10,11 +10,14 @@ import kalibr_errorterms as ket
 from . import IccCalibrator as ic
 from .IccCalibrator import *
 
-import cv2
+import os
+if os.environ.get("KALIBR_HEADLESS") != "1":
+    import cv2
 import sys
 import math
 import numpy as np
-import pylab as pl
+if os.environ.get("KALIBR_HEADLESS") != "1":
+    import pylab as pl
 import scipy.optimize
 
 
@@ -253,7 +256,7 @@ class IccCamera():
         shift = -discrete_shift*dT
         
         #Create plots
-        if verbose:
+        if verbose and os.environ.get("KALIBR_HEADLESS") != "1":
             pl.plot(t, omega_measured_norm, label="measured_raw")
             pl.plot(t, omega_predicted_norm, label="predicted")
             pl.plot(t-shift, omega_measured_norm, label="measured_corrected")

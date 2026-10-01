@@ -3,7 +3,9 @@
 #include <boost/make_shared.hpp>
 #include <Eigen/Core>
 #include <opencv2/core/core.hpp>
+#ifndef KALIBR_HEADLESS
 #include <opencv2/highgui/highgui.hpp>
+#endif
 #include <opencv2/imgproc/imgproc.hpp>
 #include <sm/logging.hpp>
 #include <aslam/cameras/GridDetector.hpp>
@@ -34,8 +36,12 @@ GridDetector::GridDetector(boost::shared_ptr<CameraGeometryBase> geometry,
 void GridDetector::initializeDetector()
 {
   if (_options.plotCornerReprojection) {
+#ifndef KALIBR_HEADLESS
     cv::namedWindow("Corner reprojection", cv::WINDOW_NORMAL);
+#endif
+#ifndef KALIBR_HEADLESS
     cv::resizeWindow("Corner reprojection", 640, 480);
+#endif
   }
 }
 
@@ -234,11 +240,17 @@ bool GridDetector::findTarget(const cv::Mat & image, const aslam::Time & stamp,
                   CV_RGB(255,0,0), 3, 8, false);
     }
 
+#ifndef KALIBR_HEADLESS
     cv::imshow("Corner reprojection", imageCopy1);  // OpenCV call
+#endif
     if (_options.imageStepping) {
+#ifndef KALIBR_HEADLESS
       cv::waitKey(0);
+#endif
     } else {
+#ifndef KALIBR_HEADLESS
       cv::waitKey(1);
+#endif
     }
   }
 

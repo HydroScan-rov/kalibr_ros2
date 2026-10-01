@@ -5,9 +5,13 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
+#ifndef KALIBR_HEADLESS
 #include <opencv2/highgui/highgui.hpp>
+#endif
 #include <opencv2/aruco.hpp>
+#ifndef KALIBR_HEADLESS
 #include <opencv2/highgui.hpp>
+#endif
 #include <opencv2/opencv.hpp>
 #include <boost/make_shared.hpp>
 #include <sm/assert_macros.hpp>

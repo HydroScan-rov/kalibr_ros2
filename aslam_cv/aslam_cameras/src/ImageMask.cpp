@@ -1,7 +1,10 @@
 #include <aslam/cameras/ImageMask.hpp>
 #include <sm/assert_macros.hpp>
 #include <sm/PropertyTree.hpp>
+#include <opencv2/imgcodecs.hpp>
+#ifndef KALIBR_HEADLESS
 #include <opencv2/highgui/highgui.hpp>
+#endif
 #include <sm/serialization_macros.hpp>
 
 namespace aslam {

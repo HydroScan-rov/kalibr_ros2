@@ -1,12 +1,16 @@
 import numpy_eigen
 import inspect
+import os
 
 from .libsm_python import *
-from .plotCoordinateFrame import plotCoordinateFrame
+if os.environ.get("KALIBR_HEADLESS") != "1":
+    from .plotCoordinateFrame import plotCoordinateFrame
 from .Progress import Progress
 from .Progress import Progress2
-from .saveFigTight import saveFigTight
-from . import PlotCollection
+if os.environ.get("KALIBR_HEADLESS") != "1":
+    from .saveFigTight import saveFigTight
+if os.environ.get("KALIBR_HEADLESS") != "1":
+    from . import PlotCollection
 
 
 def logInfo(message):

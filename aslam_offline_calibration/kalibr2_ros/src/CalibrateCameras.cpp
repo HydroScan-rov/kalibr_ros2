@@ -1,3 +1,21 @@
+#ifdef KALIBR_HEADLESS
+#include "Dataset.hpp"
+#include <CLI/CLI.hpp>
+#include <aslam/cameras/GridCalibrationTargetAprilgrid.hpp>
+#include <aslam/cameras/GridCalibrationTargetAprilgridv2.hpp>
+#include <aslam/cameras/GridDetector.hpp>
+#include <kalibr2/CalibrationTools.hpp>
+#include <kalibr2/CameraCalibrator.hpp>
+#include <kalibr2/CameraGraph.hpp>
+#include <kalibr2/CameraModels.hpp>
+#include <kalibr2/Image.hpp>
+#include <kalibr2/SynchronizedObservationView.hpp>
+#include <opencv2/imgproc.hpp>
+
+// Temporal includes
+#include <aslam/calibration/core/IncrementalEstimator.h>
+
+#else
 #include <CLI/CLI.hpp>
 #include <aslam/cameras/GridCalibrationTargetAprilgrid.hpp>
 #include <aslam/cameras/GridCalibrationTargetAprilgridv2.hpp>
@@ -16,6 +34,8 @@
 // Temporal includes
 #include <aslam/calibration/core/IncrementalEstimator.h>
 #include <kalibr2_ros/ROSToYAMLConverter.hpp>
+
+#endif
 
 using kalibr2::ros::CalibrationConfig;
 using kalibr2::ros::CameraConfig;

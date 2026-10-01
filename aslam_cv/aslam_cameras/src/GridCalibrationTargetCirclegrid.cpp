@@ -1,6 +1,8 @@
 #include <vector>
 #include <opencv2/core/core.hpp>
+#ifndef KALIBR_HEADLESS
 #include <opencv2/highgui/highgui.hpp>
+#endif
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <aslam/cameras/GridCalibrationTargetCirclegrid.hpp>
@@ -30,9 +32,15 @@ GridCalibrationTargetCirclegrid::GridCalibrationTargetCirclegrid(size_t rows, si
 void GridCalibrationTargetCirclegrid::initialize()
 {
   if (_options.showExtractionVideo) {
+#ifndef KALIBR_HEADLESS
     cv::namedWindow("Circlegrid corners", cv::WINDOW_AUTOSIZE);
+#endif
+#ifndef KALIBR_HEADLESS
     cv::resizeWindow("Circlegrid corners", 640, 480);
+#endif
+#ifndef KALIBR_HEADLESS
     cv::startWindowThread();
+#endif
   }
 }
 
@@ -87,8 +95,12 @@ bool GridCalibrationTargetCirclegrid::computeObservation(const cv::Mat & image,
                   cv::Point(50, 50), cv::FONT_HERSHEY_SIMPLEX, 0.8,
                   CV_RGB(255,0,0), 3, 8, false);
 
+#ifndef KALIBR_HEADLESS
     cv::imshow("Circlegrid corners", imageCopy1);  // OpenCV call
+#endif
+#ifndef KALIBR_HEADLESS
     cv::waitKey(1);
+#endif
   }
 
   //exit here if there is an error

@@ -57,10 +57,18 @@ GridCalibrationTargetAprilgrid::GridCalibrationTargetAprilgrid() :
 void GridCalibrationTargetAprilgrid::initialize()
 {
   if (_options.showExtractionVideo) {
+#ifndef KALIBR_HEADLESS
     cv::namedWindow("Aprilgrid: Tag detection", cv::WINDOW_NORMAL);
+#endif
+#ifndef KALIBR_HEADLESS
     cv::resizeWindow("Aprilgrid: Tag detection", 640, 480);
+#endif
+#ifndef KALIBR_HEADLESS
     cv::namedWindow("Aprilgrid: Tag corners", cv::WINDOW_NORMAL);
+#endif
+#ifndef KALIBR_HEADLESS
     cv::resizeWindow("Aprilgrid: Tag corners", 640, 480);
+#endif
   }
 
   //create the tag detector
@@ -237,8 +245,12 @@ bool GridCalibrationTargetAprilgrid::computeObservation(
                       CV_RGB(255,0,0), 3, 8, false);
       }
 
+#ifndef KALIBR_HEADLESS
     cv::imshow("Aprilgrid: Tag corners", imageCopy1);  // OpenCV call
+#endif
+#ifndef KALIBR_HEADLESS
     cv::waitKey(1);
+#endif
 
     /* copy image for modification */
     cv::Mat imageCopy2 = image.clone();
@@ -253,8 +265,12 @@ bool GridCalibrationTargetAprilgrid::computeObservation(
                     CV_RGB(255,0,0), 3, 8, false);
     }
 
+#ifndef KALIBR_HEADLESS
     cv::imshow("Aprilgrid: Tag detection", imageCopy2);  // OpenCV call
+#endif
+#ifndef KALIBR_HEADLESS
     cv::waitKey(1);
+#endif
 
     //if success is false exit here (delayed exit if _options.showExtractionVideo=true for debugging)
     if (!success)

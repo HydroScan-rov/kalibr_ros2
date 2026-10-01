@@ -1,6 +1,10 @@
 import aslam_backend as aopt
 import aslam_splines as asp
-from . import IccUtil as util
+import os
+if os.environ.get("KALIBR_HEADLESS") == "1":
+    from . import HeadlessUtil as util
+else:
+    from . import IccUtil as util
 import incremental_calibration as inc
 import kalibr_common as kc
 import sm
