@@ -86,7 +86,10 @@ std::vector<aslam::cameras::GridCalibrationTargetObservation> get_observations_f
 
 int main(int argc, char** argv) {
   CLI::App app{"kalibr_calibrate_cameras - Calibrate multiple cameras from ROS bag data"};
+#if CLI11_VERSION_MAJOR > 2 || (CLI11_VERSION_MAJOR == 2 && CLI11_VERSION_MINOR >= 3)
+  // UTF-8 argument conversion matters on Windows only; CLI11 < 2.3 (Ubuntu 22.04) lacks it.
   argv = app.ensure_utf8(argv);
+#endif
 
   std::string bag_path;
   app.add_option("-c,--config", bag_path, "Full path to calibration configuration YAML file.")

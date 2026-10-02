@@ -41,7 +41,14 @@ typedef cholmod_common_struct cholmod_common;
 // spqr.hpp is not released in libsuitesparse-dev anymore.
 // So we bring this definition from its source code.
 // See: https://github.com/PetterS/SuiteSparse/blob/27e5a8516464a6ac40bd3fa0e5b46e51b11f4765/SPQR/Include/spqr.hpp#L300-L307
+// SuiteSparse 7 (SPQR 4, Ubuntu 24.04) templates the index type; SuiteSparse 5
+// (SPQR 2, Ubuntu 22.04) exports only the entry-type instantiation.
+#include <SuiteSparseQR_definitions.h>
+#if SPQR_MAIN_VERSION >= 4
 template <typename Entry, typename Int = int64_t> double spqr_maxcolnorm
+#else
+template <typename Entry> double spqr_maxcolnorm
+#endif
 (
     // inputs, not modified
     cholmod_sparse *A,

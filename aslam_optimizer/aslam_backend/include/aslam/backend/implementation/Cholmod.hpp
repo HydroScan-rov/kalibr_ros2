@@ -445,8 +445,15 @@ namespace aslam {
     template<typename I>
     void Cholmod<I>::getR(cholmod_sparse* A, cholmod_sparse** R) {
       cholmod_sparse* qrJ = cholmod_l_transpose(A, 1, &_cholmod);
+#if defined(SPQR_MAIN_VERSION) && SPQR_MAIN_VERSION >= 4
+      // SuiteSparse 7 (Ubuntu 24.04) templates the index type.
       SuiteSparseQR<double, int64_t>(SPQR_ORDERING_FIXED, SPQR_NO_TOL, qrJ->ncol, 0,
         qrJ, NULL, NULL, NULL, NULL, R, NULL, NULL, NULL, NULL, &_cholmod);
+#else
+      // SuiteSparse 5 (Ubuntu 22.04) always uses SuiteSparse_long indices.
+      SuiteSparseQR<double>(SPQR_ORDERING_FIXED, SPQR_NO_TOL, qrJ->ncol, 0,
+        qrJ, NULL, NULL, NULL, NULL, R, NULL, NULL, NULL, NULL, &_cholmod);
+#endif
       SM_ASSERT_EQ(Exception, _cholmod.status, CHOLMOD_OK,
         "QR factorization failed");
       CholmodIndexTraits<index_t>::free_sparse(&qrJ, &_cholmod);
