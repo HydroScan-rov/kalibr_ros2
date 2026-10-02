@@ -1,14 +1,22 @@
-cmake_minimum_required(VERSION 3.28)
-project(hydroscan_kalibr VERSION 0.1.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.22)
+project(hydroscan_kalibr VERSION 0.2.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 get_filename_component(KALIBR_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 find_package(Eigen3 REQUIRED)
-find_package(Python3 3.12 EXACT REQUIRED COMPONENTS Interpreter Development NumPy)
-find_package(Boost REQUIRED COMPONENTS filesystem serialization system thread regex python312)
+# Ubuntu 22.04 ships Python 3.10 and Ubuntu 24.04 ships Python 3.12.
+find_package(Python3 3.10...<3.13 REQUIRED COMPONENTS Interpreter Development NumPy)
+find_package(Boost REQUIRED COMPONENTS filesystem serialization system thread regex
+  python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR})
 find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs calib3d aruco features2d)
 find_package(yaml-cpp REQUIRED)
-find_package(CLI11 REQUIRED)
+find_package(CLI11 QUIET)
+if(NOT TARGET CLI11::CLI11)
+  # Ubuntu 22.04 packages CLI11 as headers without a CMake package configuration.
+  find_path(CLI11_INCLUDE_DIR CLI/CLI.hpp REQUIRED)
+  add_library(CLI11::CLI11 INTERFACE IMPORTED)
+  target_include_directories(CLI11::CLI11 INTERFACE "${CLI11_INCLUDE_DIR}")
+endif()
 include(FetchContent)
 FetchContent_Declare(common_robotics_utilities
   GIT_REPOSITORY https://github.com/ToyotaResearchInstitute/common_robotics_utilities
@@ -66,7 +74,7 @@ install(FILES "${KALIBR_ROOT}/Schweizer-Messer/numpy_eigen/src/numpy_eigen/__ini
   DESTINATION python/numpy_eigen)
 
 add_library(_kalibr_image MODULE ImageBindings.cpp)
-target_link_libraries(_kalibr_image PRIVATE Python3::Python ${OpenCV_LIBS})
+target_link_libraries(_kalibr_image PRIVATE kalibr_math Python3::Python ${OpenCV_LIBS})
 set_target_properties(_kalibr_image PROPERTIES PREFIX "" INSTALL_RPATH "$ORIGIN/../lib")
 install(TARGETS _kalibr_image LIBRARY DESTINATION python)
 

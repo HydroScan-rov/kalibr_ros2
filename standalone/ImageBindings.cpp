@@ -6,6 +6,8 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/calib3d.hpp>
+#include <aslam/cameras/GridCalibrationTargetAprilgridv2.hpp>
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
@@ -128,12 +130,46 @@ static PyObject* rectify(PyObject*, PyObject* args) {
   } catch (const std::exception& error) { return failure(error); }
 }
 
+/// Detect AprilGrid corners with the same ArUco v2 detector used by the stereo optimizer.
+static PyObject* detect_aprilgrid(PyObject*, PyObject* args) {
+  PyObject* value; int rows, cols; double size, spacing;
+  if (!PyArg_ParseTuple(args, "Oiidd", &value, &rows, &cols, &size, &spacing)) return nullptr;
+  Owned data(PyArray_FROM_OTF(value, NPY_UINT8, NPY_ARRAY_CARRAY_RO));
+  if (!data) return nullptr;
+  auto* image = reinterpret_cast<PyArrayObject*>(data.get());
+  if (PyArray_NDIM(image) != 2) { PyErr_SetString(PyExc_ValueError, "Expected grayscale matrix"); return nullptr; }
+  try {
+    if (rows < 1 || cols < 1 || !(size > 0.0) || !(spacing > 0.0))
+      throw std::runtime_error("Invalid AprilGrid geometry");
+    cv::Mat pixels(PyArray_DIM(image, 0), PyArray_DIM(image, 1), CV_8U, PyArray_DATA(image));
+    auto options = aslam::cameras::GridCalibrationTargetAprilgridv2::AprilgridOptionsv2();
+    options.detectorParameters->markerBorderBits = 2;
+    // Report partial detections too; the caller applies the stage-specific minimum.
+    options.minTagsForValidObs = 0;
+    aslam::cameras::GridCalibrationTargetAprilgridv2 target(rows, cols, size, spacing, options);
+    Eigen::MatrixXd points; std::vector<bool> observed;
+    if (!target.computeObservation(pixels, points, observed)) observed.assign(target.size(), false);
+    long count = std::count(observed.begin(), observed.end(), true);
+    npy_intp dimensions[] = {count, 2};
+    Owned corners(PyArray_SimpleNew(2, dimensions, NPY_DOUBLE));
+    if (!corners) return nullptr;
+    auto* output = static_cast<double*>(PyArray_DATA(reinterpret_cast<PyArrayObject*>(corners.get())));
+    long index = 0;
+    for (size_t i = 0; i < observed.size(); ++i) {
+      if (!observed[i]) continue;
+      output[2 * index] = points(i, 0); output[2 * index + 1] = points(i, 1); ++index;
+    }
+    return Py_BuildValue("(lN)", count / 4, corners.release());
+  } catch (const std::exception& error) { return failure(error); }
+}
+
 static PyMethodDef methods[] = {
   {"decode_raw", decode_raw, METH_VARARGS, "Decode native raw pixels with stride."},
   {"decode_compressed", decode_compressed, METH_VARARGS, "Decode PNG/JPEG to grayscale."},
   {"read_gray", read_gray, METH_VARARGS, "Read a cached grayscale frame."},
   {"write_gray", write_gray, METH_VARARGS, "Write a lossless cached frame."},
   {"rectify", rectify, METH_VARARGS, "Compute stereo rectification matrices."},
+  {"detect_aprilgrid", detect_aprilgrid, METH_VARARGS, "Return (tags, corners) found by the v2 AprilGrid detector."},
   {nullptr, nullptr, 0, nullptr}
 };
 static PyModuleDef module = {PyModuleDef_HEAD_INIT, "_kalibr_image", "Headless image operations.", -1, methods};
