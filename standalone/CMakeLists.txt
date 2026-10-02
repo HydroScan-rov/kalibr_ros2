@@ -8,7 +8,23 @@ find_package(Eigen3 REQUIRED)
 find_package(Python3 3.10...<3.13 REQUIRED COMPONENTS Interpreter Development NumPy)
 find_package(Boost REQUIRED COMPONENTS filesystem serialization system thread regex
   python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR})
-find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs calib3d aruco features2d)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs calib3d features2d)
+if(OpenCV_VERSION VERSION_LESS 4.6)
+  # OpenCV 4.5 (Ubuntu 22.04) ArUco finds far fewer 2-bit-border AprilGrid tags than 4.6, which
+  # degrades stereo calibration; build the unmodified 4.6.0 module privately instead.
+  file(GLOB KALIBR_ARUCO_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/opencv_aruco_4.6.0/src/*.cpp")
+  add_library(kalibr_aruco STATIC ${KALIBR_ARUCO_SOURCES})
+  target_include_directories(kalibr_aruco PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/opencv_aruco_4.6.0/include")
+  target_link_libraries(kalibr_aruco PUBLIC ${OpenCV_LIBS})
+  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/opencv_aruco_4.6.0/LICENSE"
+    DESTINATION /usr/share/doc/hydroscan-kalibr/licenses RENAME opencv_contrib-4.6.0-aruco-LICENSE)
+  set(KALIBR_ARUCO kalibr_aruco)
+  # The private headers must win over any system opencv2/aruco.hpp.
+  include_directories(BEFORE "${CMAKE_CURRENT_SOURCE_DIR}/opencv_aruco_4.6.0/include")
+else()
+  find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs calib3d features2d aruco)
+  set(KALIBR_ARUCO "")
+endif()
 find_package(yaml-cpp REQUIRED)
 find_package(CLI11 QUIET)
 if(NOT TARGET CLI11::CLI11)
@@ -61,7 +77,7 @@ add_library(kalibr_math SHARED ${KALIBR_MATH_SOURCES}
   "${KALIBR_ROOT}/Schweizer-Messer/sm_boost/src/portable_binary_iarchive.cpp"
   "${KALIBR_ROOT}/Schweizer-Messer/sm_boost/src/portable_binary_oarchive.cpp")
 target_link_libraries(kalibr_math PUBLIC Eigen3::Eigen ${Boost_LIBRARIES}
-  ${OpenCV_LIBS} ${SUITESPARSE_LIBRARIES} pthread)
+  ${KALIBR_ARUCO} ${OpenCV_LIBS} ${SUITESPARSE_LIBRARIES} pthread)
 set_target_properties(kalibr_math PROPERTIES INSTALL_RPATH "$ORIGIN")
 install(TARGETS kalibr_math LIBRARY DESTINATION lib)
 

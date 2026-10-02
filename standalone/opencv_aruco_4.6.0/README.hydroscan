@@ -1,0 +1,3 @@
+Unmodified ArUco module of opencv_contrib 4.6.0 (commit db16caf6ceee76b43b94c846be276e92a43e9700),
+Apache License 2.0. Used only when the system OpenCV is older than 4.6: OpenCV 4.5.4 (Ubuntu 22.04)
+detects far fewer AprilGrid tags with the 2-bit border than 4.6, which degrades stereo calibration.
