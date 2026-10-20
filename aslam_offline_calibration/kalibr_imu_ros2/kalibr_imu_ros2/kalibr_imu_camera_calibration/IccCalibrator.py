@@ -105,8 +105,7 @@ class IccCalibrator(object):
         #estimate the timeshift for all cameras to the main imu
         self.noTimeCalibration = noTimeCalibration
         if not noTimeCalibration:
-            for cam in self.CameraChain.camList:
-                cam.findTimeshiftCameraImuPrior(self.ImuList[0], verbose)
+            self.CameraChain.findTimeshiftCameraChainToImuPrior(self.ImuList[0], verbose)
         
         #obtain orientation prior between main imu and camera chain (if no external input provided)
         #and initial estimate for the direction of gravity
@@ -191,6 +190,7 @@ class IccCalibrator(object):
         
 
     def recoverCovariance(self):
+        """Recover parameter uncertainty and expand a shared clock for each camera."""
         #Covariance ordering (=dv ordering)
         #ORDERING:   N=num cams
         #            1. transformation imu-cam0 --> 6
@@ -204,6 +204,8 @@ class IccCalibrator(object):
         #split and store the variance
         self.std_trafo_ic = np.array(est_stds[0:6])
         self.std_times = np.array(est_stds[6:])
+        if self.CameraChain.synchronizedCameraTimes and not self.noTimeCalibration:
+            self.std_times = np.repeat(self.std_times[:1], len(self.CameraChain.camList))
     
     def saveImuSetParametersYaml(self, resultFile):
         imuSetConfig = kc.ImuSetParameters(resultFile, True)

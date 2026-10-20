@@ -26,8 +26,8 @@ geometry_msgs::msg::TransformStamped TransformationToROS(const sm::kinematics::T
   tf_msg.transform.translation.y = t.y();
   tf_msg.transform.translation.z = t.z();
 
-  // Set rotation (quaternion)
-  const auto& q = transformation.q();
+  // Preserve the SM rotation matrix in ROS's active-quaternion convention.
+  const Eigen::Quaterniond q(transformation.C());
   tf_msg.transform.rotation.x = q.x();
   tf_msg.transform.rotation.y = q.y();
   tf_msg.transform.rotation.z = q.z();

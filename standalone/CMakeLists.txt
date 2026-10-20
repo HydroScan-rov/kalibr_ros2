@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(hydroscan_kalibr VERSION 0.2.0 LANGUAGES CXX)
+project(hydroscan_kalibr VERSION 0.2.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 get_filename_component(KALIBR_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
@@ -103,3 +103,13 @@ install(PROGRAMS calibrate-imu DESTINATION bin RENAME kalibr-calibrate-imu)
 install(DIRECTORY "${KALIBR_ROOT}/aslam_offline_calibration/kalibr_imu_ros2/kalibr_common"
   "${KALIBR_ROOT}/aslam_offline_calibration/kalibr_imu_ros2/kalibr_imu_ros2"
   DESTINATION python FILES_MATCHING PATTERN "*.py")
+
+# Check the native YAML exporter against the SM matrix, including nonzero
+# rotation: identity-only fixtures cannot detect quaternion convention errors.
+enable_testing()
+add_executable(kalibr-transform-export-test TransformExportTest.cpp Dataset.cpp)
+target_link_libraries(kalibr-transform-export-test PRIVATE kalibr_math yaml-cpp)
+add_test(NAME transform-export COMMAND kalibr-transform-export-test)
+add_executable(kalibr-time-step-test TimeStepTest.cpp)
+target_link_libraries(kalibr-time-step-test PRIVATE kalibr_math)
+add_test(NAME time-step-recovery COMMAND kalibr-time-step-test)

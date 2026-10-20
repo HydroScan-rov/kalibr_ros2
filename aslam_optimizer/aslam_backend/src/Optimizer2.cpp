@@ -234,7 +234,23 @@ namespace aslam {
                     timeBackSub.stop();
                     // This sets _J
                     timeErr.start();
-                    evaluateError(true);
+                    try {
+                        evaluateError(true);
+                    } catch (const aslam::SplineTimeOutOfBoundsException& error) {
+                        // An inadmissible LM proposal must shrink the trust region,
+                        // not terminate an otherwise valid initial problem.
+                        timeErr.stop();
+                        if (!_trustRegionPolicy->revertOnFailure()) throw;
+                        revertLastStateUpdate();
+                        evaluateError(true);  // Restore error caches at the accepted state.
+                        previousIterationFailed = true;
+                        srv.failedIterations++;
+                        srv.iterations++;
+                        deltaX = _options.convergenceDeltaX + 1.0;
+                        deltaJ = _options.convergenceDeltaJ + 1.0;
+                        _options.verbose && std::cout << "Rejected time-offset step outside spline support; reducing trust region: " << error.what() << std::endl;
+                        continue;
+                    }
                     timeErr.stop();
                     deltaJ = _p_J - _J;
                     // This was a regression.
@@ -268,7 +284,7 @@ namespace aslam {
             srv.JFinal = _p_J;
             srv.dXFinal = deltaX;
             srv.dJFinal = deltaJ;
-            srv.linearSolverFailure = linearSolverFailure;
+            srv.linearSolverFailure = linearSolverFailure || previousIterationFailed;
             return srv;
         }
 

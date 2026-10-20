@@ -10,6 +10,8 @@ namespace aslam {
     SM_DEFINE_EXCEPTION(NotImplementedException,Exception);
     SM_DEFINE_EXCEPTION(InvalidArgumentException,Exception);
     SM_DEFINE_EXCEPTION(UnsupportedOperationException,Exception);
+    /// A proposed optimization step leaves a spline expression's local time support.
+    SM_DEFINE_EXCEPTION(SplineTimeOutOfBoundsException,Exception);
 
 } // namespace aslam
 

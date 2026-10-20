@@ -92,7 +92,11 @@ PlainTransform TransformationToROS(const sm::kinematics::Transformation& value,
     std::pair<std::string, std::string> frames) { return {value, std::move(frames)}; }
 
 void transformStampedToYAML(const PlainTransform& tf, const std::filesystem::path& path) {
-  YAML::Node out; const auto& t = tf.value.t(); const auto& q = tf.value.q();
+  YAML::Node out;
+  const auto& t = tf.value.t();
+  // SM uses a passive quaternion; ROS/Eigen use an active quaternion. Export
+  // the same rotation matrix, without reversing the baseline translation.
+  const Eigen::Quaterniond q(tf.value.C());
   auto translation = out["transform"]["translation"];
   translation["x"] = t.x(); translation["y"] = t.y(); translation["z"] = t.z();
   auto rotation = out["transform"]["rotation"];

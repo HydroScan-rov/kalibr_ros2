@@ -21,6 +21,16 @@ if os.environ.get("KALIBR_HEADLESS") != "1":
 import scipy.optimize
 
 
+def haveIdenticalCameraTimes(datasets):
+    """Require complete matching integer header sequences before sharing a clock."""
+    stamps = [getattr(dataset, "stamps", None) for dataset in datasets]
+    return (len(stamps) > 1 and all(value is not None and np.ndim(value) == 1
+                                  and np.issubdtype(np.asarray(value).dtype, np.integer)
+                                  for value in stamps)
+            and len(stamps[0]) > 1
+            and all(np.array_equal(stamps[0], value) for value in stamps[1:]))
+
+
 def initCameraBagDataset(bagfile, topic, from_to, freq, perform_synchronization):
     print("Initializing camera rosbag dataset reader:")
     print("\tDataset:          {0}".format(bagfile))
@@ -318,7 +328,8 @@ class IccCamera():
         pose.initPoseSplineSparse(times, curve, knots, 1e-4)
         return pose
     
-    def addDesignVariables(self, problem, noExtrinsics=True, noTimeCalibration=True, baselinedv_group_id=HELPER_GROUP_ID):
+    def addDesignVariables(self, problem, noExtrinsics=True, noTimeCalibration=True, baselinedv_group_id=HELPER_GROUP_ID, sharedTimeDv=None):
+        """Register extrinsics and either an independent or a shared camera clock."""
         # Add the calibration design variables.
         active = not noExtrinsics
         self.T_c_b_Dv = aopt.TransformationDv(self.T_extrinsic, rotationActive=active, translationActive=active)
@@ -326,9 +337,12 @@ class IccCamera():
             problem.addDesignVariable(self.T_c_b_Dv.getDesignVariable(i), baselinedv_group_id)
         
         # Add the time delay design variable.
-        self.cameraTimeToImuTimeDv = aopt.Scalar(0.0)
-        self.cameraTimeToImuTimeDv.setActive( not noTimeCalibration )
-        problem.addDesignVariable(self.cameraTimeToImuTimeDv, CALIBRATION_GROUP_ID)
+        if sharedTimeDv is None:
+            self.cameraTimeToImuTimeDv = aopt.Scalar(0.0)
+            self.cameraTimeToImuTimeDv.setActive(not noTimeCalibration)
+            problem.addDesignVariable(self.cameraTimeToImuTimeDv, CALIBRATION_GROUP_ID)
+        else:
+            self.cameraTimeToImuTimeDv = sharedTimeDv
         
     def addCameraErrorTerms(self, problem, poseSplineDv, T_cN_b, blakeZissermanDf=0.0, timeOffsetPadding=0.0):
         print("")
@@ -437,6 +451,10 @@ class IccCameraChain():
                                             numThreads=parsed.num_threads) )  
                 
         self.chainConfig = chainConfig
+        # Only the standalone reader exposes original integer header timestamps.
+        # Never infer synchronization from target detections or rounded seconds.
+        self.synchronizedCameraTimes = haveIdenticalCameraTimes(
+            [cam.dataset for cam in self.camList])
         
         #find and store time between first and last image over all cameras
         self.findCameraTimespan()
@@ -444,6 +462,17 @@ class IccCameraChain():
         #use stereo calibration guess if no baselines are provided
         self.initializeBaselines()
         
+
+    def findTimeshiftCameraChainToImuPrior(self, imu, verbose=False):
+        """Initialize one common clock for cameras with identical capture timestamps."""
+        self.camList[0].findTimeshiftCameraImuPrior(imu, verbose)
+        for cam in self.camList[1:]:
+            if self.synchronizedCameraTimes:
+                cam.timeshiftCamToImuPrior = self.camList[0].timeshiftCamToImuPrior
+                print("Identical camera header timestamps: sharing cam0 time prior with",
+                      cam.dataset.topic, "shift:", cam.timeshiftCamToImuPrior)
+            else:
+                cam.findTimeshiftCameraImuPrior(imu, verbose)
 
     def initializeBaselines(self):
         #estimate baseline prior if no external guess is provided           
@@ -521,6 +550,7 @@ class IccCameraChain():
         return self.camList[camNr].cameraTimeToImuTimeDv.toScalar() + self.camList[camNr].timeshiftCamToImuPrior
     
     def addDesignVariables(self, problem, noTimeCalibration = True, noChainExtrinsics = True):
+        """Register the chain with one time correction for synchronized cameras."""
         #add the design variables (T(R,t) & time)  for all induvidual cameras
         for camNr, cam in enumerate( self.camList ):
             #the first "baseline" dv is between the imu and cam0
@@ -530,7 +560,11 @@ class IccCameraChain():
             else:
                 noExtrinsics = noChainExtrinsics
                 baselinedv_group_id = HELPER_GROUP_ID
-            cam.addDesignVariables(problem, noExtrinsics, noTimeCalibration, baselinedv_group_id=baselinedv_group_id)
+            sharedTimeDv = (self.camList[0].cameraTimeToImuTimeDv
+                            if self.synchronizedCameraTimes and camNr > 0 else None)
+            cam.addDesignVariables(problem, noExtrinsics, noTimeCalibration,
+                                   baselinedv_group_id=baselinedv_group_id,
+                                   sharedTimeDv=sharedTimeDv)
     
     #add the reprojection error terms for all cameras in the chain
     def addCameraChainErrorTerms(self, problem, poseSplineDv, blakeZissermanDf=-1, timeOffsetPadding=0.0):

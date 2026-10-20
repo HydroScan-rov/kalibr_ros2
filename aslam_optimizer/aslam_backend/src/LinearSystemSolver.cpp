@@ -2,6 +2,7 @@
 #include <boost/thread.hpp>
 #include <aslam/backend/ErrorTerm.hpp>
 #include <boost/ref.hpp>
+#include <exception>
 
 namespace aslam {
   namespace backend {
@@ -22,27 +23,19 @@ namespace aslam {
       }
     }
 
-    struct SafeJobReturnValue {
-      SafeJobReturnValue(const std::exception& e) : _e(e) {}
-
-      std::exception _e;
-    };
-
+    /// Preserve exception types from worker threads for the optimizer's step policy.
     struct SafeJob {
       boost::function<void()> _fn;
-      SafeJobReturnValue* _rval;
-      SafeJob() : _rval(NULL) {}
-      SafeJob(boost::function<void()> fn) : _fn(fn), _rval(NULL) {}
-      ~SafeJob() {
-        if (_rval) delete _rval;
-      }
+      std::exception_ptr _error;
+      SafeJob() = default;
+      explicit SafeJob(boost::function<void()> fn) : _fn(fn) {}
 
+      /// Capture a worker failure without slicing its dynamic exception type.
       void operator()() {
         try {
           _fn();
-        } catch (const std::exception& e) {
-          _rval = new SafeJobReturnValue(e);
-          std::cout << "Exception in thread block: " << e.what() << std::endl;
+        } catch (...) {
+          _error = std::current_exception();
         }
       }
     };
@@ -70,8 +63,8 @@ namespace aslam {
         threads.join_all();
         // Now go through and look for exceptions.
         for (size_t i = 0; i < nThreads; ++i) {
-          if (jobs[i]._rval) {
-            throw jobs[i]._rval->_e;
+          if (jobs[i]._error) {
+            std::rethrow_exception(jobs[i]._error);
           }
         }
       }
