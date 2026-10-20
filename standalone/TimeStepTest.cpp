@@ -15,6 +15,7 @@ class DomainError final : public aslam::backend::ErrorTermFs<1> {
     setInvR(Eigen::Matrix<double, 1, 1>::Identity());
   }
   int rejected = 0;
+  int regressions = 0;
  private:
   /// Reject only invalid proposals; the initial state at -2 is valid.
   double evaluateErrorImplementation() override {
@@ -25,7 +26,14 @@ class DomainError final : public aslam::backend::ErrorTermFs<1> {
       throw aslam::SplineTimeOutOfBoundsException("test time support");
     }
     Eigen::Matrix<double, 1, 1> error;
-    error << std::exp(x) - 2.0;
+    double residual = std::exp(x) - 2.0;
+    // A deterministic numerical floor induces small rejected terminal steps,
+    // after the solver has already found and retained a valid low-cost state.
+    if (mode_ == 3 && std::abs(residual) < 1e-4) {
+      residual = 0.01;
+      ++regressions;
+    }
+    error << residual;
     setError(error);
     return evaluateChiSquaredError();
   }
@@ -63,6 +71,9 @@ static void check(int threads, int mode) {
     if (mode == 0 && (result.linearSolverFailure || first->rejected == 0 ||
                       std::abs(scalar->toScalar() - std::log(2.0)) > 1e-6))
       throw std::runtime_error("LM did not recover from its invalid proposal");
+    if (mode == 3 && (result.linearSolverFailure || first->regressions == 0 ||
+                      std::abs(scalar->toScalar() - std::log(2.0)) > 1e-3))
+      throw std::runtime_error("A numerically rejected terminal step discarded a valid solution");
     if (mode == 2 && (!result.linearSolverFailure || scalar->toScalar() != -2.0))
       throw std::runtime_error("Rejected-step exhaustion was reported as success");
   } catch (const std::runtime_error& error) {
@@ -76,7 +87,7 @@ static void check(int threads, int mode) {
 int main() {
   try {
     for (int threads : {1, 2})
-      for (int mode : {0, 1, 2}) check(threads, mode);
+      for (int mode : {0, 1, 2, 3}) check(threads, mode);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

@@ -284,7 +284,8 @@ namespace aslam {
             srv.JFinal = _p_J;
             srv.dXFinal = deltaX;
             srv.dJFinal = deltaJ;
-            srv.linearSolverFailure = linearSolverFailure || previousIterationFailed;
+            // A rejected final proposal does not invalidate the accepted solution.
+            srv.linearSolverFailure = linearSolverFailure || srv.failedIterations >= _options.maxIterations;
             return srv;
         }
 
