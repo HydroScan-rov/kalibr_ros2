@@ -228,6 +228,7 @@ namespace aslam {
                     linearSolverFailure = true;
                     srv.failedIterations++;
                 } else {
+                    linearSolverFailure = false;  // A successful retry clears the transient solver failure.
                     /// Apply the state update. _A, _b, _dx, and _H are passed in implicitly.
                     timeBackSub.start();
                     deltaX = applyStateUpdate();

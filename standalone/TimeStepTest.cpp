@@ -47,6 +47,22 @@ class DomainError final : public aslam::backend::ErrorTermFs<1> {
   int mode_;
 };
 
+/// Inject an initial factorization failure while retaining the real LM solve on retry.
+class RetryPolicy final : public aslam::backend::LevenbergMarquardtTrustRegionPolicy {
+ public:
+  /// Select either one transient failure or permanent failure exhaustion.
+  explicit RetryPolicy(bool permanent) : LevenbergMarquardtTrustRegionPolicy(1e-6), permanent_(permanent) {}
+  /// Let the actual optimizer retry before solving the real residual system.
+  bool solveSystemImplementation(double cost, bool previous, int threads, Eigen::VectorXd& delta) override {
+    const bool solved = LevenbergMarquardtTrustRegionPolicy::solveSystemImplementation(cost, previous, threads, delta);
+    if (attempts_++ == 0 || permanent_) return false;
+    return solved;
+  }
+ private:
+  bool permanent_;
+  int attempts_ = 0;
+};
+
 /// Check recovery, error propagation, and failure exhaustion with one or two workers.
 static void check(int threads, int mode) {
   using namespace aslam::backend;
@@ -59,22 +75,23 @@ static void check(int threads, int mode) {
   problem->addErrorTerm(boost::make_shared<DomainError>(scalar.get(), mode));
   Optimizer2Options options;
   options.nThreads = threads;
-  options.maxIterations = mode == 2 ? 4 : 40;
+  options.maxIterations = (mode == 2 || mode == 5) ? 4 : 40;
   options.convergenceDeltaX = 1e-9;
   options.convergenceDeltaJ = 1e-12;
   options.trustRegionPolicy = boost::make_shared<LevenbergMarquardtTrustRegionPolicy>(1e-6);
+  if (mode >= 4) options.trustRegionPolicy = boost::make_shared<RetryPolicy>(mode == 5);
   Optimizer2 optimizer(options);
   optimizer.setProblem(problem);
   bool propagated = false;
   try {
     const auto result = optimizer.optimize();
-    if (mode == 0 && (result.linearSolverFailure || first->rejected == 0 ||
+    if ((mode == 0 || mode == 4) && (result.linearSolverFailure || first->rejected == 0 ||
                       std::abs(scalar->toScalar() - std::log(2.0)) > 1e-6))
       throw std::runtime_error("LM did not recover from its invalid proposal");
     if (mode == 3 && (result.linearSolverFailure || first->regressions == 0 ||
                       std::abs(scalar->toScalar() - std::log(2.0)) > 1e-3))
       throw std::runtime_error("A numerically rejected terminal step discarded a valid solution");
-    if (mode == 2 && (!result.linearSolverFailure || scalar->toScalar() != -2.0))
+    if ((mode == 2 || mode == 5) && (!result.linearSolverFailure || scalar->toScalar() != -2.0))
       throw std::runtime_error("Rejected-step exhaustion was reported as success");
   } catch (const std::runtime_error& error) {
     if (mode != 1 || std::string(error.what()) != "unrelated worker failure") throw;
@@ -87,7 +104,7 @@ static void check(int threads, int mode) {
 int main() {
   try {
     for (int threads : {1, 2})
-      for (int mode : {0, 1, 2, 3}) check(threads, mode);
+      for (int mode : {0, 1, 2, 3, 4, 5}) check(threads, mode);
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
